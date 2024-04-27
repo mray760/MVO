@@ -1,0 +1,119 @@
+import pandas as pd
+from API import get_stock_prices
+from stockprices_excel import get_excel_prices
+from functions import portfolio_standard_deviation, portfolio_return, portfolio_sharpe, create_popup
+import numpy as np
+from pypfopt.efficient_frontier import EfficientFrontier
+from pypfopt import risk_models
+from pypfopt import expected_returns
+from pypfopt.discrete_allocation import DiscreteAllocation, get_latest_prices
+
+use_excel = True
+
+
+#Parameters
+to_date = '2023-12-31'
+from_date = '2022-01-01'
+tickers = ['AAPL','MSFT','NVDA']
+weight_constraint = .10
+
+rf = .05
+portfolio_value = 100000
+
+
+number_of_stocks = len(tickers)
+weights = []
+for ticker in tickers:
+    weight = (100/len(tickers))*.01
+    weights.append(weight)
+
+weights = np.array(weights)
+
+if use_excel == False:
+    df = get_stock_prices(tickers, to_date, from_date)
+    df.reset_index(inplace=True)
+else:
+    df = get_excel_prices()
+
+
+
+df_return = df.copy()
+
+#Calculate return data and create columns
+for ticker in tickers:
+    new_column_name = f'{ticker}' + '_Returns'
+    df_return[new_column_name] = df_return[ticker].pct_change()
+
+
+#Drop NA's and non-return Columns
+df_return = df_return.dropna()
+
+for ticker in tickers:
+    df_return.drop(columns = ticker,inplace=True)
+
+
+
+#covariance matrix
+cov_matrix = df_return.copy()
+cov_matrix = cov_matrix.drop(columns='Date')
+cov_matrix = cov_matrix.cov()*252
+
+
+#Calculate portfolio standard deviation
+std = portfolio_standard_deviation(weights,cov_matrix=cov_matrix)
+
+#Calculate portfolio mean
+df_mean = df_return.copy()
+df_mean.drop(columns = 'Date',inplace=True)
+for col in df_mean.columns:
+    for ticker in tickers:
+        if col.startswith(ticker):
+            new_column_name_2 = f'{ticker}' + '_mean'
+            df_mean[new_column_name_2] = df_mean[col].mean()*252
+            df_mean.drop(columns = col, inplace=True)
+
+df_mean = df_mean.iloc[0:1]
+prt = portfolio_return(weights,mean = df_mean)
+
+#Calculate portfolio Sharpe
+
+sharpe_ratio = portfolio_sharpe(portfolio_std=std,portfolio_return=prt,risk_free_rate=rf)
+
+##Portfolio Optimization
+
+#calculate E(r) and annualized standard deviation
+
+df_mu = df_return.copy()
+df_mu = df_mu.drop(columns = 'Date')
+
+mu = expected_returns.mean_historical_return(df_mu,returns_data=True, frequency=252,compounding=False)
+s = risk_models.sample_cov(df_mu, returns_data=True,frequency=252)
+
+#Optimize for max Sharpe - documentation: https://pyportfolioopt.readthedocs.io/en/latest/MeanVariance.html#
+ef = EfficientFrontier(mu,s)
+ef.add_constraint(lambda x : x >= weight_constraint) # adding a weight contraint.
+weights = ef.max_sharpe(risk_free_rate=rf)
+cleaned_weights = ef.clean_weights()
+performance_results = ef.portfolio_performance(verbose=True,risk_free_rate=rf)
+optimized_rt,optimized_std,optimized_sharpe = ef.portfolio_performance(verbose=True,risk_free_rate=rf)
+
+key_weights = list(cleaned_weights.items())
+print(cleaned_weights)
+
+#Discrete portfolio values
+df_latest = df.copy()
+df_latest = df_latest.drop(columns = 'Date')
+
+latest_price = get_latest_prices(df_latest)
+
+da = DiscreteAllocation(cleaned_weights,latest_price,total_portfolio_value= portfolio_value)
+
+
+
+allocation, leftover =da.lp_portfolio()
+print("How many shares to purchase for optimal allocation:",allocation)
+print('Funds remaining: ${:.2f}'.format(leftover))
+
+
+create_popup(allocation,leftover,key_weights,prt,std,sharpe_ratio,optimized_rt,optimized_std,optimized_sharpe)
+
