@@ -1,0 +1,45 @@
+import pandas as pd
+import numpy as np
+import tkinter as tk
+
+
+def portfolio_standard_deviation(weights,cov_matrix):
+        variance = weights.T @ cov_matrix @ weights
+        return np.sqrt(variance)
+
+def portfolio_return(weights,mean):
+        mean_array = mean.to_numpy()
+        return np.dot(mean_array,weights)[0]
+
+
+def portfolio_sharpe(portfolio_std,portfolio_return,risk_free_rate):
+        return ((portfolio_return - risk_free_rate)/portfolio_std)
+
+
+
+def create_popup(allocation,leftover,clean_weights,prt,std,sharpe,optimized_rt,optimized_std,optimized_sharpe):
+        root = tk.Tk()
+        root.title("MVO Using Historical Returns")
+        root.geometry("800x500")
+
+        output_text = f'''
+                Optimal Weights: {clean_weights}
+                Optimal Return: {optimized_rt *100: .2f}%
+                Optimal Std: {optimized_std *100: .2f}%
+                Optimized Sharpe: {optimized_sharpe: .2f}
+                
+                Portfolio return with equal weights is: {prt *100:.2f}%
+                Portfolio std with equal weights is: {std *100: .2f}%
+                Portfolio Sharpe ratio with equal weights is: {sharpe:.2f}
+                
+                Shares for Optimal Allocation: {allocation}
+                Funds remaining: ${leftover:.2f}
+
+
+
+                '''
+
+        label = tk.Label(root, text=output_text, justify=tk.LEFT)
+        label.pack(padx=10, pady=10)
+
+        root.mainloop()
