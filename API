@@ -1,0 +1,24 @@
+from polygon import RESTClient, reference_apis
+import pandas as pd
+import datetime as dt
+
+def get_stock_prices(tickers,to_date,from_date):
+
+    client = RESTClient(api_key='IDvlL7LDns_K4gcmZEUv5LrTUnGZYfUN')
+    df = pd.DataFrame()
+
+    for ticker in tickers:
+        temp_df = pd.DataFrame(client.get_aggs(ticker= ticker,multiplier=1,timespan= 'day', from_= from_date, to=to_date))
+        temp_df['ticker'] = ticker
+        df = pd.concat([df,temp_df])
+
+
+    df['Date'] = df['timestamp'].apply( lambda x: pd.to_datetime(x*1000000))
+
+    df['Date'] = df['Date'].dt.date
+    df = df.set_index('Date')
+
+    df_2 = df[['close','ticker']] #filter out all columns except close and ticker
+    pivot = df_2.pivot(columns = 'ticker', values= 'close')
+
+    return pivot
